@@ -1,3 +1,7 @@
+//
+// Created by hlhd on 2020/11/18.
+//
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -19,6 +23,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/epoll.h>
+#include <errno.h>
 
 int createListenFD(const char* IP, int &port)
 {
@@ -129,6 +134,8 @@ int main(int argc, char * argv[])
     /* epoll树是用来检测节点对应的文件描述符有没有发生变化 */
     /* 初始化epoll树 */
     struct epoll_event ev; // 往树上挂节点本质上是挂一个结构体, 所以初始化一个结构体; ev对应的是listen_socket_fd中的信息
+
+    /* 设置边沿触发 */
     ev.events = EPOLLIN;
     ev.data.fd = listen_socket_fd;
 
@@ -159,17 +166,24 @@ int main(int argc, char * argv[])
                 }
                 printf("有客户端连接\n");
 
+                /* 设置文件描述符connection_fd为非阻塞模式 */
+                int flag = fcntl(connection_fd, F_GETFL);
+                flag |= O_NONBLOCK;
+                fcntl(connection_fd, F_SETFL, flag);
+
                 /* 将新得到的connection_fd挂到epoll树上 */
                 struct epoll_event tmp;
-                tmp.events = EPOLLIN;
+
+                /* 设置边沿触发 */
+                tmp.events = EPOLLIN | EPOLLET;
                 tmp.data.fd = connection_fd;
                 epoll_ctl(epoll_fd, EPOLL_CTL_ADD, connection_fd, &tmp); // 将connection_fd的信息存入到tmp这个结构体变量中
 
                 /* 打印客户端信息 */
                 char client_ip[64] = {0};
                 printf("New Client IP: %s, Port: %d\n",
-                        inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, client_ip, sizeof(client_ip)),
-                        ntohs(client_addr.sin_port));
+                       inet_ntop(AF_INET, &client_addr.sin_addr.s_addr, client_ip, sizeof(client_ip)),
+                       ntohs(client_addr.sin_port));
             }
             else
             {
@@ -180,26 +194,43 @@ int main(int argc, char * argv[])
                 /* 读数据 */
                 /* 初始化缓冲区，用来接收客户端发送的数据 */
                 /* 处理客户端发来的请求 */
-                // char read_buf[1024] = {0};
+                //char read_buf[1024] = {0};
                 char read_buf[1024] = {0};
-                int readData_len = recv(cur_fd, read_buf, sizeof(read_buf), 0);
-                if (readData_len == -1) {
-                    perror("recv error");
-                    exit(-1);
+                int readData_len;
+
+                /* 循环读数据 */
+                while ((readData_len = recv(cur_fd, read_buf, sizeof(read_buf), 0)) > 0)
+                {
+                    /* 将数据打印到终端 */
+                    printf("The client's request is: %s\n", read_buf);
+                    //write(STDOUT_FILENO, read_buf, readData_len);
+
+                    /* 发送给客户端 */
+                    //send(cur_fd, read_buf, readData_len, 0);
+                    http_parser(cur_fd, read_buf);
+                    /* write(cur_fd, read_buf, readDate_len); */
+                    //close(cur_fd);
                 }
-                else if (readData_len == 0) {
-                    printf("client disconnected..");
+
+                if (readData_len == 0)
+                {
+                    printf("客户端断开了连接..");
 
                     /* 将fd从epoll树上删掉 */
                     epoll_ctl(epoll_fd, EPOLL_CTL_DEL, cur_fd, NULL);
                     close(cur_fd);
                 }
-                else {
-                    printf("The client's request is: %s\n", read_buf);
-                    //write(STDOUT_FILENO, read_buf, readData_len);
-                    http_parser(cur_fd, read_buf);
-                    /* write(cur_fd, read_buf, readDate_len); */
-                    //close(cur_fd);
+                else if (readData_len == -1)
+                {
+                    if (errno == EAGAIN)
+                    {
+                        printf("缓冲区数据已经读完了\n");
+                    }
+                    else
+                    {
+                        printf("recv error\n");
+                        exit(-1);
+                    }
                 }
             }
         }
