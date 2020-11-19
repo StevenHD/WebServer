@@ -226,6 +226,7 @@ int main(int argc, char * argv[])
                     /* 发送给客户端 */
                     http_parser(cur_fd, read_buf);
                 }
+                close(cur_fd);
 
                 if (readData_len == 0)
                 {
