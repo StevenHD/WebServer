@@ -24,6 +24,8 @@
 #include <arpa/inet.h>
 #include <sys/epoll.h>
 #include <errno.h>
+#include <signal.h>
+#include <cassert>
 
 int createListenFD(const char* IP, int &port)
 {
@@ -110,6 +112,20 @@ void http_parser(int& client_fd, char * msg)
     send(client_fd, output.c_str(), size, 0);
 }
 
+/* 忽略SIGPIPE信号 */
+void addsig( int sig, void( handler )(int), bool restart = true )
+{
+    struct sigaction sa;
+    memset( &sa, '\0', sizeof( sa ) );
+    sa.sa_handler = handler;
+    if( restart )
+    {
+        sa.sa_flags |= SA_RESTART;
+    }
+    sigfillset( &sa.sa_mask );
+    assert( sigaction( sig, &sa, NULL ) != -1 );
+}
+
 int main(int argc, char * argv[])
 {
     if (argc <= 2)
@@ -120,6 +136,9 @@ int main(int argc, char * argv[])
 
     const char* IP = argv[1];
     int port = atoi(argv[2]);   // string to int
+
+    /* 忽略SIGPIPE信号 */
+    addsig( SIGPIPE, SIG_IGN );
 
     /* 创建监听套接字，返回一个套接字的文件描述符 */
     int listen_socket_fd = createListenFD(IP, port);
