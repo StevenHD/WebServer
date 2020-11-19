@@ -25,7 +25,7 @@
 #include <sys/epoll.h>
 #include <errno.h>
 
-int createListenFD(int &port)
+int createListenFD(const char* IP, int &port)
 {
     /* 创建套接字 */
     int listen_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -42,9 +42,9 @@ int createListenFD(int &port)
     /* 填充地址结构体 */
     bzero(&server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;               // 地址族
-    //inet_pton(AF_INET, IP, &server_addr.sin_addr);
+    inet_pton(AF_INET, IP, &server_addr.sin_addr);
     server_addr.sin_port = htons(port);   // 小端转大端, 设置端口
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 监听本机所有的IP
+    //server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 监听本机所有的IP
 
 
     // bind IP and port
@@ -112,17 +112,17 @@ void http_parser(int& client_fd, char * msg)
 
 int main(int argc, char * argv[])
 {
-    if (argc < 2)
+    if (argc <= 2)
     {
         printf("eg: WebServer port\n");
         exit(-1);
     }
 
-    //const char* IP = argv[1];
-    int port = atoi(argv[1]);   // string to int
+    const char* IP = argv[1];
+    int port = atoi(argv[2]);   // string to int
 
     /* 创建监听套接字，返回一个套接字的文件描述符 */
-    int listen_socket_fd = createListenFD(port);
+    int listen_socket_fd = createListenFD(IP, port);
 
     /* 初始化客户端的地址 */
     struct sockaddr_in client_addr;
@@ -135,7 +135,6 @@ int main(int argc, char * argv[])
     /* 初始化epoll树 */
     struct epoll_event ev; // 往树上挂节点本质上是挂一个结构体, 所以初始化一个结构体; ev对应的是listen_socket_fd中的信息
 
-    /* 设置边沿触发 */
     ev.events = EPOLLIN;
     ev.data.fd = listen_socket_fd;
 
@@ -202,14 +201,11 @@ int main(int argc, char * argv[])
                 while ((readData_len = recv(cur_fd, read_buf, sizeof(read_buf), 0)) > 0)
                 {
                     /* 将数据打印到终端 */
-                    printf("The client's request is: %s\n", read_buf);
+                    //printf("The client's request is: %s\n", read_buf);
                     //write(STDOUT_FILENO, read_buf, readData_len);
 
                     /* 发送给客户端 */
-                    //send(cur_fd, read_buf, readData_len, 0);
                     http_parser(cur_fd, read_buf);
-                    /* write(cur_fd, read_buf, readDate_len); */
-                    //close(cur_fd);
                 }
 
                 if (readData_len == 0)
