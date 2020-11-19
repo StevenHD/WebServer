@@ -126,6 +126,46 @@ void addsig( int sig, void( handler )(int), bool restart = true )
     assert( sigaction( sig, &sa, NULL ) != -1 );
 }
 
+void reset_oneshot( int& epollfd, int& fd )
+{
+    epoll_event event;
+    event.data.fd = fd;
+    event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+    epoll_ctl( epollfd, EPOLL_CTL_MOD, fd, &event );
+}
+
+/* 设置为非阻塞 */
+int setnonblocking( int& fd )
+{
+    int old_option = fcntl( fd, F_GETFL );
+    int new_option = old_option | O_NONBLOCK;
+    fcntl( fd, F_SETFL, new_option );
+    return old_option;
+}
+
+void add_fd( int& epoll_fd, int& fd, bool oneshot )
+{
+    /* 设置文件描述符connection_fd为非阻塞模式 */
+    if (oneshot)
+    {
+        setnonblocking( fd );
+        /* 将新得到的connection_fd挂到epoll树上 */
+        struct epoll_event tmp;
+        /* 设置边沿触发 */
+        tmp.events = EPOLLIN | EPOLLET;
+        if (oneshot) tmp.events |= EPOLLONESHOT;
+        tmp.data.fd = fd;
+        epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &tmp); // 将connection_fd的信息存入到tmp这个结构体变量中
+    }
+    else {
+        struct epoll_event ev;
+        ev.data.fd = fd;
+        ev.events = EPOLLIN | EPOLLET;
+        epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev);
+    }
+
+}
+
 int main(int argc, char * argv[])
 {
     if (argc <= 2)
@@ -153,15 +193,13 @@ int main(int argc, char * argv[])
     /* epoll树是用来检测节点对应的文件描述符有没有发生变化 */
     /* 初始化epoll树 */
     struct epoll_event ev; // 往树上挂节点本质上是挂一个结构体, 所以初始化一个结构体; ev对应的是listen_socket_fd中的信息
-
-    ev.events = EPOLLIN;
-    ev.data.fd = listen_socket_fd;
+    add_fd(epoll_fd, listen_socket_fd, false);
 
     /* epoll_wait()中的第2个参数，用来通知是哪些事件发生了变化 */
     struct epoll_event events[2000];
 
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_socket_fd, &ev);
-    while (1) {
+    while (1)
+    {
         /* 使用epoll通知内核进行文件流的检测 */
         int ret = epoll_wait(epoll_fd, events, sizeof(events) / sizeof(events[0]), -1);
         printf("=====================================epoll_wait=====================================\n");
@@ -184,18 +222,7 @@ int main(int argc, char * argv[])
                 }
                 printf("有客户端连接\n");
 
-                /* 设置文件描述符connection_fd为非阻塞模式 */
-                int flag = fcntl(connection_fd, F_GETFL);
-                flag |= O_NONBLOCK;
-                fcntl(connection_fd, F_SETFL, flag);
-
-                /* 将新得到的connection_fd挂到epoll树上 */
-                struct epoll_event tmp;
-
-                /* 设置边沿触发 */
-                tmp.events = EPOLLIN | EPOLLET;
-                tmp.data.fd = connection_fd;
-                epoll_ctl(epoll_fd, EPOLL_CTL_ADD, connection_fd, &tmp); // 将connection_fd的信息存入到tmp这个结构体变量中
+                add_fd(epoll_fd, connection_fd, true);
 
                 /* 打印客户端信息 */
                 char client_ip[64] = {0};
@@ -220,7 +247,7 @@ int main(int argc, char * argv[])
                 while ((readData_len = recv(cur_fd, read_buf, sizeof(read_buf), 0)) > 0)
                 {
                     /* 将数据打印到终端 */
-                    //printf("The client's request is: %s\n", read_buf);
+                    printf("The client's request is: %s\n", read_buf);
                     //write(STDOUT_FILENO, read_buf, readData_len);
 
                     /* 发送给客户端 */
@@ -240,6 +267,7 @@ int main(int argc, char * argv[])
                 {
                     if (errno == EAGAIN)
                     {
+                        reset_oneshot( epoll_fd, cur_fd );
                         printf("缓冲区数据已经读完了\n");
                     }
                     else
