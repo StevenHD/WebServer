@@ -3,4 +3,13 @@ project(WebServer)
 
 set(CMAKE_CXX_STANDARD 11)
 
-add_executable(WebServer main.cpp main_epollET.cpp non_block_et_epoll.cpp)
+add_executable(WebServer test/main.cpp test/main_epollET.cpp test/non_block_et_epoll.cpp test/thpool.h test/thpool.cpp
+        WebServer/locker.h
+        WebServer/locker.cpp
+        WebServer/task.h
+        WebServer/task.cpp
+        WebServer/threadpool.cpp
+        WebServer/threadpool.h
+        WebServer/WebServer.h
+        WebServer/WebServer.cpp
+        WebServer/main.cpp)

@@ -1,6 +1,6 @@
-//
-// Created by hlhd on 2020/11/18.
-//
+/*
+ * @author hlhd
+ * */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -163,7 +163,6 @@ void add_fd( int& epoll_fd, int& fd, bool oneshot )
         ev.events = EPOLLIN | EPOLLET;
         epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev);
     }
-
 }
 
 int main(int argc, char * argv[])
