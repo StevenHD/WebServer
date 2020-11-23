@@ -238,7 +238,6 @@ int main(int argc, char * argv[])
                 /* 读数据 */
                 /* 初始化缓冲区，用来接收客户端发送的数据 */
                 /* 处理客户端发来的请求 */
-                //char read_buf[1024] = {0};
                 char read_buf[1024] = {0};
                 int readData_len;
 
@@ -252,7 +251,7 @@ int main(int argc, char * argv[])
                     /* 发送给客户端 */
                     http_parser(cur_fd, read_buf);
                 }
-                close(cur_fd);
+                //close(cur_fd);
 
                 if (readData_len == 0)
                 {

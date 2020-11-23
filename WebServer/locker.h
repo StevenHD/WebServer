@@ -31,6 +31,7 @@ public:
     bool wait();
     bool signal();
     bool broadcast();
+
 private:
     pthread_mutex_t _mutex;
     pthread_cond_t _condvar;
