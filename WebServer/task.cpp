@@ -71,8 +71,9 @@ void Task::parseGET(const std::string &uri, int start)
 {
     std::string filename = uri.substr(1);
 
-    if (uri == "/" || uri == "/index.html") send_File("index.html", "text/html", start);
-    else if (uri.find(".jpg") != std::string::npos || uri.find(".png") != std::string::npos) send_File(filename, "image/jpg", start);
+    if (uri == "/" || uri == "/index.html") send_File("./index.html", "text/html", start);
+    else if (uri.find(".jpg") != std::string::npos || uri.find(".png") != std::string::npos)
+        send_File(filename, "image/jpg", start);
     else if (uri.find(".html") != std::string::npos) send_File(filename, "text/html", start);
     else if (uri.find(".js") != std::string::npos) send_File(filename, "yexy/javascript", start);
     else if (uri.find(".css") != std::string::npos) send_File(filename, "text/css", start);
