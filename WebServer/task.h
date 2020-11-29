@@ -8,6 +8,12 @@
 #include <iostream>
 #include <string>
 #include <cstring>
+
+#include <vector>
+#include <sstream>
+#include <iterator>
+#include <fstream>
+
 #include <sys/socket.h>
 #include <sys/epoll.h>
 #include <sys/wait.h>
@@ -19,6 +25,7 @@
 
 const int BUFFER_SIZE = 1024;
 
+void http_parser(int& client_fd, char * msg);
 void remove_FD(int epoll_fd, int fd);
 void reset_ONESHOT(int epoll_fd, int fd);
 

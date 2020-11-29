@@ -18,6 +18,49 @@ void reset_ONESHOT(int epoll_fd, int fd)
     epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &ev);
 }
 
+void http_parser(int& client_fd, char * msg)
+{
+    // Parse out the client's request string e.g. GET /index.html HTTP/1.1
+    std::istringstream iss(msg);
+    std::vector<std::string> parsed((std::istream_iterator<std::string>(iss)), std::istream_iterator<std::string>());
+
+    std::string content = "404 Not Found";
+    std::string filename = "/index.html";
+    int errorCode = 404;
+
+    if (parsed.size() >= 3 && parsed[0] == "GET")
+    {
+        filename = parsed[1];
+        if (filename == "/") filename = "/index.html";
+    }
+
+    // Open the document in the local file system
+    std::ifstream f("." + filename);
+
+    // Check if it opened and if it did, grab the entire contents
+    if (f.good())
+    {
+        std::string str_file((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        content = str_file;
+        errorCode = 200;
+    }
+    f.close();
+
+    // Write the document back to the client
+    std::ostringstream oss;
+    oss << "HTTP/1.1 " << errorCode << " OK\r\n";
+    oss << "Cache-Control: no-cache, private\r\n";
+    oss << "Content-Type: text/html\r\n";
+    oss << "Content-Length: " << content.size() << "\r\n";
+    oss << "\r\n";
+    oss << content;
+
+    std::string output = oss.str();
+    int size = output.size() + 1;
+
+    send(client_fd, output.c_str(), size, 0);
+}
+
 void Task::execute_Task()
 {
     /* 读数据 */
@@ -35,15 +78,16 @@ void Task::execute_Task()
         /* 发送给客户端 */
         int start_id = 0;
         char method[8], uri[1024], version[16];
-        sscanf(in_buf, "%s %s %s", method, uri, version);
-
-        if (strcmp(method, "GET") == 0) parseGET(uri, start_id);
-        //else if (strcmp(method, "POST")) parsePOST(uri, in_buf);
-        else
-        {
-            const char* header = "HTTP/1.1 501 Not Implemented\r\nContent-Type: text/plain;charset=utf-8\r\n\r\n";
-            send(_connect_fd, header, strlen(header), 0);
-        }
+//        sscanf(in_buf, "%s %s %s", method, uri, version);
+//
+//        if (strcmp(method, "GET") == 0) parseGET(uri, start_id);
+//        //else if (strcmp(method, "POST")) parsePOST(uri, in_buf);
+//        else
+//        {
+//            const char* header = "HTTP/1.1 501 Not Implemented\r\nContent-Type: text/plain;charset=utf-8\r\n\r\n";
+//            send(_connect_fd, header, strlen(header), 0);
+//        }
+        http_parser(_connect_fd, in_buf);
     }
     //close(_connect_fd);
 
