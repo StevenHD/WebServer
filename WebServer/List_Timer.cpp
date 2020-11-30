@@ -1,4 +1,5 @@
 #include "List_Timer.h"
+#include "WebServer.h"
 
 List_Timer::List_Timer() : _prev(nullptr), _next(nullptr) {}
 
@@ -227,4 +228,70 @@ void Sort_Timer_List::tick()
         delete tmp;
         tmp = _head;
     }
+}
+
+void Utils::init(int timeslot)
+{
+    _TIMESLOT = timeslot;
+}
+
+int Utils::set_NonBlocking(int fd)
+{
+    int old_option = fcntl( fd, F_GETFL );
+    int new_option = old_option | O_NONBLOCK;
+    fcntl( fd, F_SETFL, new_option );
+    return old_option;
+}
+
+void Utils::add_FD(int epoll_fd, int fd, bool oneshot)
+{
+    epoll_event ev;
+    ev.events = EPOLLIN | EPOLLET;
+    if (oneshot) ev.events |= EPOLLONESHOT;
+    ev.data.fd = fd;
+    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev);
+    set_NonBlocking( fd );
+}
+
+void Utils::add_Sig(int sig, void(handler)(int), bool restart)
+{
+    struct sigaction sa;
+    memset(&sa, '\0', sizeof(sa));
+    sa.sa_handler =  handler;
+    if (restart) sa.sa_flags |= SA_RESTART;
+    sigfillset(&sa.sa_mask);
+    assert(sigaction(sig, &sa, NULL) != -1);
+}
+
+void Utils::sig_handler(int sig)
+{
+    // 为保证函数的可重入性，保留原来的errno
+    int save_errno = errno;
+    int msg = sig;
+    send(_pipefd[1], (char*)&msg, 1, 0);
+    errno = save_errno;
+}
+
+// 定时处理任务，重新定时以不断触发SIGALRM信号
+void Utils::timer_handler()
+{
+    _timer_lst.tick();
+    alarm(_TIMESLOT);
+}
+
+void Utils::show_error(int connectfd, const char *info)
+{
+    send(connectfd, info, strlen(info), 0);
+    close(connectfd);
+}
+
+int * Utils::_pipefd = nullptr;
+int Utils::_epollfd = 0;
+
+void cb_func(Client_Data* user_data)
+{
+    epoll_ctl(Utils::_epollfd, EPOLL_CTL_DEL, user_data->socketfd, 0);
+    assert(user_data);
+    close(user_data->socketfd);
+    printf("close fd %d\n", user_data->socketfd);
 }

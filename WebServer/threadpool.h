@@ -7,7 +7,6 @@
 #include "task.h"
 #include "locker.h"
 
-
 class ThreadPool
 {
 public:

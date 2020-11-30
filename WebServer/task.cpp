@@ -78,15 +78,6 @@ void Task::execute_Task()
         /* 发送给客户端 */
         int start_id = 0;
         char method[8], uri[1024], version[16];
-//        sscanf(in_buf, "%s %s %s", method, uri, version);
-//
-//        if (strcmp(method, "GET") == 0) parseGET(uri, start_id);
-//        //else if (strcmp(method, "POST")) parsePOST(uri, in_buf);
-//        else
-//        {
-//            const char* header = "HTTP/1.1 501 Not Implemented\r\nContent-Type: text/plain;charset=utf-8\r\n\r\n";
-//            send(_connect_fd, header, strlen(header), 0);
-//        }
         http_parser(_connect_fd, in_buf);
     }
     //close(_connect_fd);

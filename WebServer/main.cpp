@@ -15,6 +15,9 @@ int main(int argc, char * argv[])
     int port = atoi(argv[1]);   // string to int
 
     WebServer _webserver(port);
+
+    _webserver.eventListen();
+
     _webserver.go();
 
     return 0;

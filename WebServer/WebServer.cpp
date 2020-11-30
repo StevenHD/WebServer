@@ -4,40 +4,6 @@
 
 #include "WebServer.h"
 
-int set_NonBlocking(int fd)
-{
-    int old_option = fcntl( fd, F_GETFL );
-    int new_option = old_option | O_NONBLOCK;
-    fcntl( fd, F_SETFL, new_option );
-    return old_option;
-}
-
-void add_FD(int epoll_fd, int fd, bool oneshot)
-{
-    epoll_event ev;
-    /* 设置文件描述符connection_fd为非阻塞模式 */
-
-    /* 将新得到的connection_fd挂到epoll树上 */
-    /* 设置边沿触发 */
-    ev.events = EPOLLIN | EPOLLET;
-    if (oneshot) ev.events |= EPOLLONESHOT;
-    ev.data.fd = fd;
-    epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev); // 将connection_fd的信息存入到tmp这个结构体变量中
-
-    set_NonBlocking( fd );
-}
-
-/* 设置信号处理函数 */
-void add_Sig(int sig, void(handler)(int), bool restart)
-{
-    struct sigaction sa;
-    memset(&sa, '\0', sizeof(sa));
-    sa.sa_handler =  handler;
-    if (restart) sa.sa_flags |= SA_RESTART;
-    sigfillset(&sa.sa_mask);
-    assert(sigaction(sig, &sa, nullptr) != -1);
-}
-
 WebServer::WebServer(int port): _port(port)
 {
     bzero(&server_addr, sizeof(server_addr));
@@ -45,8 +11,11 @@ WebServer::WebServer(int port): _port(port)
 
 WebServer::~WebServer() { close(_socketFD); }
 
-void WebServer::createListenFD()
+void WebServer::eventListen()
 {
+    /* 忽略SIGPIPE信号 */
+    signal( SIGPIPE, SIG_IGN );
+
     /* 创建套接字 */
     _socketFD = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -57,6 +26,10 @@ void WebServer::createListenFD()
 
     /* 初始化服务器 */
     socklen_t server_len = sizeof(server_addr);
+    /* 填充地址结构体 */
+    server_addr.sin_family = AF_INET;               // 地址族
+    server_addr.sin_port = htons(_port);   // 小端转大端, 设置端口
+    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 监听本机所有的IP
 
     // bind IP and port
     res = bind(_socketFD, (struct sockaddr*)&server_addr, server_len);
@@ -74,24 +47,7 @@ void WebServer::createListenFD()
     }
     printf("WebServer start accept connection..\n");    // wait for connecting
 
-    //return _socketFD;
-}
-
-
-int WebServer::go()
-{
-    /* 忽略SIGPIPE信号 */
-    //igno_SIG( SIGPIPE, SIG_IGN );
-    signal( SIGPIPE, SIG_IGN );
-
-    /* 填充地址结构体 */
-    server_addr.sin_family = AF_INET;               // 地址族
-    //inet_pton(AF_INET, IP, &server_addr.sin_addr);
-    server_addr.sin_port = htons(_port);   // 小端转大端, 设置端口
-    server_addr.sin_addr.s_addr = htonl(INADDR_ANY); // 监听本机所有的IP
-
-    /* 创建监听套接字，返回一个套接字的文件描述符 */
-    createListenFD();
+    _utils.init(TIMESLOT);
 
     /* 创建线程池 */
     ThreadPool threadPool(64);
@@ -106,30 +62,36 @@ int WebServer::go()
 
     /* epoll树是用来检测节点对应的文件描述符有没有发生变化 */
     /* 初始化epoll树 */
-    epoll_event ev; // 往树上挂节点本质上是挂一个结构体, 所以初始化一个结构体; ev对应的是listen_socket_fd中的信息
-    //add_FD(_epollFD, _socketFD, false);
-    ev.data.fd = _socketFD;
-    ev.events = EPOLLIN;
-    epoll_ctl(_epollFD, EPOLL_CTL_ADD, _socketFD, &ev);
+    /* 往树上挂节点本质上是挂一个结构体 */
+    /* 所以初始化一个结构体 */
+    /* ev对应的是listen_socket_fd中的信息 */
+    _utils.add_FD(_epollFD, _socketFD, false);
 
     /* epoll_wait()中的第2个参数，用来通知是哪些事件发生了变化 */
     struct epoll_event events[2048];
 
-    int ret = socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
+    int ret = socketpair(PF_UNIX, SOCK_STREAM, 0, _m_pipefd);
     if (ret == -1)
     {
         perror("socketpair error");
         exit(-1);
     }
-    set_NonBlocking(pipefd[1]);
-    add_FD(_epollFD, pipefd[0], false);
+    _utils.set_NonBlocking(_m_pipefd[1]);
+    _utils.add_FD(_epollFD, _m_pipefd[0], false);
 
-    /* 设置信号处理函数 */
+    _utils.add_Sig(SIGALRM, _utils.sig_handler, false);
+    _utils.add_Sig(SIGTERM, _utils.sig_handler, false);
 
-    bool timeout = false;
     alarm(TIMESLOT);
 
-    while (true)
+    Utils::_pipefd
+}
+
+int WebServer::go()
+{
+    bool stop_server = false;
+    bool timeout = false;
+    while (!stop_server)
     {
         /* 使用epoll通知内核进行文件流的检测 */
         int ret = epoll_wait(_epollFD, events, sizeof(events) / sizeof(events[0]), -1);
@@ -156,14 +118,61 @@ int WebServer::go()
                     exit(-1);
                 }
                 printf("新的客户端连接\n");
-
                 add_FD(_epollFD, connection_fd, true);
+                _users[connection_fd].addr = client_addr;
+                _users[connection_fd].socketfd = connection_fd;
+
+                /* 创建定时器 */
+                List_Timer* timer = new List_Timer;
+                timer->_usrData = &_users[connection_fd];
+                timer->cb_func = cb_func;
+                time_t cur_time = time(nullptr);
+                timer->_expireTime = cur_time + 3 * TIMESLOT;
+                _users[connection_fd].timer = timer;
+                timer_lst.add_timer(timer);
             }
-            else
+            /* 处理信号 */
+            else if ((cur_fd == pipefd[0]) && (events[i].events & EPOLLIN))
+            {
+                int _sig;
+                char _signals[1024];
+                int res = recv(pipefd[0], _signals, sizeof(_signals), 0);
+                if (res == -1)
+                {
+                    // handle the error
+                    continue;
+                }
+                else if (ret == 0) continue;
+                else
+                {
+                    for (int i = 0; i < res; i ++ )
+                    {
+                        switch(_signals[i])
+                        {
+                            case SIGALRM:
+                            {
+                                /*
+                                 * 使用timeout变量标记有定时任务需要处理
+                                 * 但不立即处理定时任务
+                                 * 这是因为定时任务的优先级不是很高
+                                 * 我们优先处理其他更重要的任务
+                                 */
+                                timeout = true;
+                                break;
+                            }
+                            case SIGTERM:
+                            {
+                                stop_server = true;
+                            }
+                        }
+                    }
+                }
+            }
+            else if (events[i].events & EPOLLIN)
             {
                 /* 处理已经连接的客户端发送过来的数据 */
                 /* 这里只处理"读操作" */
-                if ((events[i].events & EPOLLIN) == 0) continue;
+                //if ((events[i].events & EPOLLIN) == 0) continue;
 
                 /* 当有新数据写入的时候，新建任务 */
                 Task * task = new Task(cur_fd, _epollFD);

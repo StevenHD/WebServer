@@ -1,19 +1,19 @@
 /*
  * @author: hlhd
- * */
+ */
 
 #ifndef WEBSERVER_WEBSERVER_H
 #define WEBSERVER_WEBSERVER_H
 
 #include <netinet/in.h>
+#include <netinet/in.h>
 #include <cassert>
 #include "threadpool.h"
+#include "List_Timer.h"
 
 const int TIMESLOT = 5;
-
-void add_FD(int epoll_fd, int fd, bool oneshot, struct epoll_event epev);
-void add_Sig(int sig, void(handler)(int), bool restart);
-int set_NonBlocking(int fd);
+const int FD_LIMIT = 65535;
+static Sort_Timer_List timer_lst;
 
 class WebServer
 {
@@ -22,16 +22,21 @@ private:
     int _socketFD;
     int _epollFD;
     struct sockaddr_in server_addr;
-    static int pipefd[2];
+
+    int _m_pipefd[2];
 
 public:
     WebServer(int port);
     ~WebServer();
 
     int go();
-    void createListenFD();
+    void eventListen();
     void timer(int connfd, struct sockaddr_in client_addr);
 
+public:
+    /* 定时器相关 */
+    Client_Data* _users_timer;
+    Utils _utils;
 };
 
 #endif //WEBSERVER_WEBSERVER_H
