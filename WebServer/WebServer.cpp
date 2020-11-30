@@ -27,6 +27,24 @@ void add_FD(int epoll_fd, int fd, bool oneshot)
     set_NonBlocking( fd );
 }
 
+/* 设置信号处理函数 */
+void add_Sig(int sig, void(handler)(int), bool restart)
+{
+    struct sigaction sa;
+    memset(&sa, '\0', sizeof(sa));
+    sa.sa_handler =  handler;
+    if (restart) sa.sa_flags |= SA_RESTART;
+    sigfillset(&sa.sa_mask);
+    assert(sigaction(sig, &sa, nullptr) != -1);
+}
+
+WebServer::WebServer(int port): _port(port)
+{
+    bzero(&server_addr, sizeof(server_addr));
+}
+
+WebServer::~WebServer() { close(_socketFD); }
+
 void WebServer::createListenFD()
 {
     /* 创建套接字 */
@@ -58,6 +76,7 @@ void WebServer::createListenFD()
 
     //return _socketFD;
 }
+
 
 int WebServer::go()
 {
@@ -95,6 +114,20 @@ int WebServer::go()
 
     /* epoll_wait()中的第2个参数，用来通知是哪些事件发生了变化 */
     struct epoll_event events[2048];
+
+    int ret = socketpair(PF_UNIX, SOCK_STREAM, 0, pipefd);
+    if (ret == -1)
+    {
+        perror("socketpair error");
+        exit(-1);
+    }
+    set_NonBlocking(pipefd[1]);
+    add_FD(_epollFD, pipefd[0], false);
+
+    /* 设置信号处理函数 */
+
+    bool timeout = false;
+    alarm(TIMESLOT);
 
     while (true)
     {

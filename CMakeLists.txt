@@ -14,4 +14,4 @@ add_executable(
         WebServer/WebServer.h
         WebServer/WebServer.cpp
         WebServer/main.cpp
-        )
+        WebServer/List_Timer.cpp WebServer/List_Timer.h fork.cpp)
