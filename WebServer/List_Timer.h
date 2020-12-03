@@ -88,8 +88,8 @@ public:
     void show_error(int connectfd, const char *info);
 
 public:
-    static int *_pipefd;
-    static int _epollfd;
+    static int *_u_pipefd;
+    static int _u_epollfd;
     Sort_Timer_List _timer_lst;
     int _TIMESLOT;
 };

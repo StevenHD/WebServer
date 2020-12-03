@@ -21,6 +21,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/sendfile.h>
+#include <netinet/in.h>
 
 
 const int BUFFER_SIZE = 1024;
@@ -31,26 +32,35 @@ void reset_ONESHOT(int epoll_fd, int fd);
 
 class Task
 {
+public:
+    static const int READ_BUFFER_SIZE = 2048;
+    static const int WRITE_BUFFER_SIZE = 1024;
+
+    /* 读为0, 写为1 */
+    int _task_state;
+
 private:
-    int _connect_fd;
-    int _epoll_fd;
+    int _task_socketfd;
+    int _task_epollfd;
+
+    sockaddr_in _task_address;
+    char _task_read_buf[READ_BUFFER_SIZE];
+    char _task_write_buf[WRITE_BUFFER_SIZE];
 
 public:
     Task() {}
-    Task(int fd, int epollfd) : _connect_fd(fd), _epoll_fd(epollfd) {}
+    Task(int fd, int epollfd) : _task_socketfd(fd), _epoll_fd(epollfd) {}
     ~Task()
     {
-        remove_FD(_epoll_fd, _connect_fd);
+        remove_FD(_task_epollfd, _task_socketfd);
     }
+    void init(int sockfd, const sockaddr_in &addr);
 
     void execute_Task();
-
-    //void http_parser(int _connect_fd, char* read_buf);
     int send_File(const std::string& filename, const char *type,
                     int start, const int statusCode = 200, const char* statusDesc = "OK");
-
     void parseGET(const std::string& uri, int start = 0);
-    //void parsePOST(const std::string& uri, char *buf);
+
 };
 
 #endif //WEBSERVER_TASK_H
