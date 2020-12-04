@@ -14,7 +14,7 @@
 const int TIMESLOT = 5;             //最小超时单位
 const int MAX_FD = 65536;           //最大文件描述符
 const int MAX_EVENT_NUMBER = 10000; //最大事件数
-static Sort_Timer_List timer_lst;
+static Sort_Timer_List timer_lst;   // 定时器相关参数
 
 class WebServer
 {
@@ -38,16 +38,19 @@ public:
     int _s_port;
     int _s_listenfd;
     int _s_epollfd;
-    int _s_pipefd[2];
+
     struct sockaddr_in server_addr;
     Task* _task_users;
 
     /* epoll相关 */
     epoll_event _s_events[MAX_EVENT_NUMBER];
 
-    /* 定时器相关 */
+    /* 每个user（http请求）对应的timer */
     Client_Data* _users_timer;
+
+    /* 定时器相关 */
     Utils _utils;
+    int _s_pipefd[2];
 };
 
 #endif //WEBSERVER_WEBSERVER_H

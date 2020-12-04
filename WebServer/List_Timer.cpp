@@ -275,7 +275,10 @@ void Utils::sig_handler(int sig)
 // 定时处理任务，重新定时以不断触发SIGALRM信号
 void Utils::timer_handler()
 {
+    /* 定时处理任务 */
     _timer_lst.tick();
+
+    /* 重新定时以不断触发SIGALRM信号 */
     alarm(_TIMESLOT);
 }
 

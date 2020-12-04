@@ -70,18 +70,22 @@ void WebServer::eventListen()
     /* epoll_wait()中的第2个参数，用来通知是哪些事件发生了变化 */
     struct epoll_event events[2048];
 
+    /* 创建管道，注册pipefd[0]上的可读事件 */
     int ret = socketpair(PF_UNIX, SOCK_STREAM, 0, _s_pipefd);
     if (ret == -1)
     {
         perror("socketpair error");
         exit(-1);
     }
+    /* 设置管道写端为非阻塞 */
     _utils.set_NonBlocking(_s_pipefd[1]);
+    /* 设置管道读端为ET非阻塞，并添加到epoll内核事件表 */
     _utils.add_FD(_s_epollfd, _s_pipefd[0], false);
 
     _utils.add_Sig(SIGALRM, _utils.sig_handler, false);
     _utils.add_Sig(SIGTERM, _utils.sig_handler, false);
 
+    /* 每隔TIMESLOT时间触发SIGALRM信号 */
     alarm(TIMESLOT);
 
     Utils::_u_pipefd = _s_pipefd;
