@@ -17,4 +17,4 @@ add_executable(
         WebServer/List_Timer.cpp WebServer/List_Timer.h test/fork.cpp
         test/set_daemon.cpp
         test/mutex_trylock.cpp
-        test/mutex_locker.cpp test/mutex_locker.cpp test/nomutex_locker.cpp)
+        test/mutex_locker.cpp test/mutex_locker.cpp test/nomutex_locker.cpp chat_server/thread_server.c chat_server/ListNode.h chat_server/ListNode.c chat_server/thread_server.cpp)
