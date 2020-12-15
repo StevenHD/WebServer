@@ -96,12 +96,6 @@ public:
         return &_task_address;
     }
 
-    //--
-    int send_File(const std::string& filename, const char *type,
-                    int start, const int statusCode = 200, const char* statusDesc = "OK");
-
-    void parseGET(const std::string& uri, int start = 0);
-
 private:
     void init_conn();
     void unmap();

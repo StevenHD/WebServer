@@ -44,8 +44,7 @@ void Sort_Timer_List::add_timer(List_Timer *timer)
 
 /* 一个重载的辅助函数
  * 它被公有的add_timer函数和adjust_timer函数调用
- * 该函数表示将目标定时器timer添加到节点List_head之后的部分链表中
- */
+ * 该函数表示将目标定时器timer添加到节点List_head之后的部分链表中 */
 void Sort_Timer_List::add_timer(List_Timer *timer, List_Timer *List_head)
 {
     List_Timer* tmp = List_head;
@@ -80,12 +79,10 @@ void Sort_Timer_List::add_timer(List_Timer *timer, List_Timer *List_head)
     }
 }
 
-/*
- * 当某个定时任务发生变化的时候
+/* 当某个定时任务发生变化的时候
  * 调整对应的定时器在链表中的位置
  * 这个函数只考虑【被调整的定时器的超时时间延长】的情况
- * 也就是说【该定时器】需要往链表的尾部移动
- */
+ * 也就是说【该定时器】需要往链表的尾部移动  */
 void Sort_Timer_List::adjust_timer(List_Timer *timer)
 {
     if (!timer) return;
@@ -125,9 +122,7 @@ void Sort_Timer_List::adjust_timer(List_Timer *timer)
     }
 }
 
-/*
- * 将目标定时器timer从链表中删除
- */
+/* 将目标定时器timer从链表中删除 */
 void Sort_Timer_List::del_timer(List_Timer *timer)
 {
     if (!timer) return;
@@ -180,12 +175,10 @@ void Sort_Timer_List::del_timer(List_Timer *timer)
     delete timer;
 }
 
-/*
- * SIGALRM信号每次被触发就在
+/* SIGALRM信号每次被触发就在
  * 其信号处理函数（如果使用的是统一事件源，则是主函数）中
  * 执行一次tick函数
- * 从而可以处理链表上[到期的任务]
- */
+ * 从而可以处理链表上[到期的任务]  */
 void Sort_Timer_List::tick()
 {
     if (!_head) return;
@@ -230,12 +223,16 @@ void Sort_Timer_List::tick()
     }
 }
 
+//-------------------Utils-------------------//
+
+/* 初始化 */
 void Utils::init(int timeslot)
 {
     _TIMESLOT = timeslot;
 }
 
-int Utils::set_NonBlocking(int fd)
+/* 对文件描述符设置非阻塞 */
+int Utils::set_nonblocking(int fd)
 {
     int old_option = fcntl( fd, F_GETFL );
     int new_option = old_option | O_NONBLOCK;
@@ -243,17 +240,29 @@ int Utils::set_NonBlocking(int fd)
     return old_option;
 }
 
-void Utils::add_FD(int epoll_fd, int fd, bool oneshot)
+/* 将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT */
+void Utils::add_fd(int epoll_fd, int fd, bool oneshot)
 {
     epoll_event ev;
     ev.events = EPOLLIN | EPOLLET;
     if (oneshot) ev.events |= EPOLLONESHOT;
     ev.data.fd = fd;
     epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &ev);
-    set_NonBlocking( fd );
+    set_nonblocking( fd );
 }
 
-void Utils::add_Sig(int sig, void(handler)(int), bool restart)
+/* 信号处理函数 */
+void Utils::sig_handler(int sig)
+{
+    // 为保证函数的可重入性，保留原来的errno
+    int save_errno = errno;
+    int msg = sig;
+    send(_u_pipefd[1], (char*)&msg, 1, 0);
+    errno = save_errno;
+}
+
+/* 设置信号函数 */
+void Utils::add_sig(int sig, void(handler)(int), bool restart)
 {
     struct sigaction sa;
     memset(&sa, '\0', sizeof(sa));
@@ -263,16 +272,7 @@ void Utils::add_Sig(int sig, void(handler)(int), bool restart)
     assert(sigaction(sig, &sa, NULL) != -1);
 }
 
-void Utils::sig_handler(int sig)
-{
-    // 为保证函数的可重入性，保留原来的errno
-    int save_errno = errno;
-    int msg = sig;
-    send(_pipefd[1], (char*)&msg, 1, 0);
-    errno = save_errno;
-}
-
-// 定时处理任务，重新定时以不断触发SIGALRM信号
+/* 定时处理任务，重新定时以不断触发SIGALRM信号 */
 void Utils::timer_handler()
 {
     /* 定时处理任务 */
@@ -288,13 +288,17 @@ void Utils::show_error(int connectfd, const char *info)
     close(connectfd);
 }
 
-int * Utils::_pipefd = nullptr;
-int Utils::_epollfd = 0;
+int * Utils::_u_pipefd = nullptr;
+int Utils::_u_epollfd = 0;
 
-void cb_func(Client_Data* user_data)
+/* 定时器回调函数，用来删除非活动连接socket上的注册事件，并关闭 */
+void cb_func(Client_Data* usr_data)
 {
-    epoll_ctl(Utils::_epollfd, EPOLL_CTL_DEL, user_data->socketfd, 0);
-    assert(user_data);
-    close(user_data->socketfd);
-    printf("close fd %d\n", user_data->socketfd);
+    epoll_ctl(Utils::_u_epollfd, EPOLL_CTL_DEL, usr_data->socketfd, 0);
+    assert(usr_data);
+
+    close(usr_data->socketfd);
+    printf("close fd %d\n", usr_data->socketfd);
+
+    Task::_usr_cnt --;
 }

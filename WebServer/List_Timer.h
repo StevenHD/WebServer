@@ -64,25 +64,14 @@ public:
     Utils() = default;
     ~Utils() = default;
 
-    /* 初始化 */
+
     void init(int timeslot);
 
-    /* 将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT */
-    void add_FD(int epoll_fd, int fd, bool oneshot);
+    void add_fd(int epoll_fd, int fd, bool oneshot);
+    void add_sig(int sig, void(handler)(int), bool restart);
 
-    /* 设置信号函数 */
-    void add_Sig(int sig, void(handler)(int), bool restart);
-
-    /* 对文件描述符设置非阻塞 */
-    int set_NonBlocking(int fd);
-
-    /* 信号处理函数 */
+    int set_nonblocking(int fd);
     static void sig_handler(int sig);
-
-    /*
-     * 定时处理任务
-     * 重新定时以不断触发SIGALRM信号
-     */
     void timer_handler();
 
     void show_error(int connectfd, const char *info);
@@ -94,7 +83,6 @@ public:
     int _TIMESLOT;
 };
 
-/* 定时器回调函数，用来删除非活动连接socket上的注册事件，并关闭 */
-void cb_func(Client_Data* user_data);
+void cb_func(Client_Data* usr_data);
 
 #endif //WEBSERVER_LIST_TIMER_H
