@@ -15,11 +15,47 @@ const char *error_404_form = "The requested file was not found on this server.\n
 const char *error_500_title = "Internal Error";
 const char *error_500_form = "There was an unusual problem serving the request file.\n";
 
-//网站根目录，文件夹内存放请求的资源和跳转的html文件
+/* 网站根目录，文件夹内存放请求的资源和跳转的html文件 */
 const char* doc_root = "/home/hlhd/CLionProjects/WebServer";
 
 int Task::_usr_cnt = 0;
 int Task::_task_epollfd = -1;
+
+/* 对文件描述符设置非阻塞 */
+int setnonblocking(int fd)
+{
+    int old_option = fcntl(fd, F_GETFL);
+    int new_option = old_option | O_NONBLOCK;
+    fcntl(fd, F_SETFL, new_option);
+    return old_option;
+}
+
+/* 从内核时间表删除描述符 */
+void removefd(int epollfd, int fd)
+{
+    epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
+    close(fd);
+}
+
+/* 将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT */
+void addfd(int epollfd, int fd, bool one_shot)
+{
+    epoll_event ev;
+    ev.data.fd = fd;
+    ev.events = EPOLLIN | EPOLLET;
+    if (one_shot) ev.events |= EPOLLONESHOT;
+    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
+    setnonblocking(fd);
+}
+
+/* 将事件重置为EPOLLONESHOT */
+void resetoneshot(int epoll_fd, int fd, int mod)
+{
+    epoll_event _ev;
+    _ev.data.fd = fd;
+    _ev.events = mod | EPOLLET | EPOLLONESHOT;
+    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &_ev);
+}
 
 /* 关闭http连接 */
 void Task::close_conn(bool read_close)
@@ -28,7 +64,7 @@ void Task::close_conn(bool read_close)
     if (read_close &&(_task_socketfd != -1))
     {
         printf("close %d\n", _task_socketfd);
-        remove_fd(_task_epollfd, _task_socketfd);
+        removefd(_task_epollfd, _task_socketfd);
         _task_socketfd = -1;
         _usr_cnt --;
     }
@@ -40,7 +76,7 @@ void Task::init(int sockfd, const sockaddr_in &addr, char *root)
     _task_socketfd = sockfd;
     _task_address = addr;
 
-    add_fd(_task_epollfd, _task_socketfd, true);
+    addfd(_task_epollfd, _task_socketfd, true);
     _usr_cnt ++;
 
     // 当浏览器出现连接重置时
@@ -395,7 +431,7 @@ bool Task::write_data()
     // 表示响应报文为空，一般不会出现这种情况
     if (bytes_to_send = 0)
     {
-        reset_oneshot(_task_epollfd,
+        resetoneshot(_task_epollfd,
                       _task_socketfd,
                       EPOLLIN);
         init_conn();
@@ -430,7 +466,7 @@ bool Task::write_data()
                 }
 
                 // 重新注册写事件
-                reset_oneshot(_task_epollfd,
+                resetoneshot(_task_epollfd,
                               _task_socketfd,
                               EPOLLOUT);
                 return true;
@@ -445,7 +481,7 @@ bool Task::write_data()
         if (bytes_to_send <= 0)
         {
             unmap();
-            reset_oneshot(_task_epollfd, _task_socketfd,
+            resetoneshot(_task_epollfd, _task_socketfd,
                           EPOLLIN);
 
             if (_linker)
@@ -503,7 +539,7 @@ bool Task::add_status_line(int status,const char* title)
 }
 
 /* 添加消息报头，具体的添加文本长度、连接状态和空行 */
-bool Task::add_headers(int content_len)
+void Task::add_headers(int content_len)
 {
     add_content_length(content_len);
     add_linker();
@@ -611,7 +647,7 @@ void Task::process()
     if (read_ret == NO_REQUEST)
     {
         /* 注册并监听读事件 */
-        reset_oneshot(_task_epollfd, _task_socketfd, EPOLLIN);
+        resetoneshot(_task_epollfd, _task_socketfd, EPOLLIN);
         return;
     }
 
@@ -620,5 +656,5 @@ void Task::process()
     if (!write_ret) close_conn(true);
 
     /* 注册并监听写事件 */
-    reset_oneshot(_task_epollfd, _task_socketfd, EPOLLOUT);
+    resetoneshot(_task_epollfd, _task_socketfd, EPOLLOUT);
 }

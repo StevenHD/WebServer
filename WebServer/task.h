@@ -26,45 +26,6 @@
 #include <sys/uio.h>
 #include <sys/mman.h>
 
-void http_parser(int& client_fd, char * msg);
-
-/* 对文件描述符设置非阻塞 */
-int set_nonblocking(int fd)
-{
-    int old_option = fcntl(fd, F_GETFL);
-    int new_option = old_option | O_NONBLOCK;
-    fcntl(fd, F_SETFL, new_option);
-    return old_option;
-}
-
-/* 从内核时间表删除描述符 */
-void remove_fd(int epollfd, int fd)
-{
-    epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, 0);
-    close(fd);
-}
-
-/* 将内核事件表注册读事件，ET模式，选择开启EPOLLONESHOT */
-void add_fd(int epollfd, int fd, bool one_shot)
-{
-    epoll_event ev;
-    ev.data.fd = fd;
-    ev.events = EPOLLIN | EPOLLET;
-    if (one_shot) ev.events |= EPOLLONESHOT;
-    epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev);
-    set_nonblocking(fd);
-}
-
-/* 将事件重置为EPOLLONESHOT */
-void reset_oneshot(int epoll_fd, int fd, int mod)
-{
-    epoll_event _ev;
-    _ev.data.fd = fd;
-    _ev.events = mod | EPOLLET | EPOLLONESHOT;
-    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &_ev);
-}
-
-
 class Task
 {
 public:
@@ -124,7 +85,7 @@ private:
      * 以下函数均由do_request调用 */
 
     bool add_status_line(int status,const char* title);
-    bool add_headers(int content_len);
+    void add_headers(int content_len);
     bool add_content_length(int content_len);
     bool add_content_type();
     bool add_linker();

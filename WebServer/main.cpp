@@ -16,9 +16,9 @@ int main(int argc, char * argv[])
 
     WebServer _webserver(port);
 
-    _webserver.eventListen();
+    _webserver.event_listen();
 
-    _webserver.go();
+    _webserver.event_loop();
 
     return 0;
 }
