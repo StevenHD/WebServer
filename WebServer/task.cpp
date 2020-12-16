@@ -15,8 +15,10 @@ const char *error_404_form = "The requested file was not found on this server.\n
 const char *error_500_title = "Internal Error";
 const char *error_500_form = "There was an unusual problem serving the request file.\n";
 
+
 /* 网站根目录，文件夹内存放请求的资源和跳转的html文件 */
 const char* doc_root = "/home/hlhd/CLionProjects/WebServer";
+
 
 int Task::_usr_cnt = 0;
 int Task::_task_epollfd = -1;
